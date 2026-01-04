@@ -72,18 +72,18 @@ const App: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     try {
       const saved = safeLocalStorage.getItem('vip_tutor_profile');
-      // Default to 'basic' if not present or new user
+      // SUPER VIP PRO: Default to VIP Lifetime for everyone!
       const defaultProfile: UserProfile = { 
-        name: 'Bạn Học Viên', 
+        name: 'Bạn Học Viên VIP', 
         joinDate: Date.now(), 
-        target: 'Giao tiếp cơ bản',
-        accountTier: 'basic',
-        subscriptionExpiry: null,
+        target: 'IELTS 8.0+',
+        accountTier: 'vip', // Default VIP
+        subscriptionExpiry: null, // Lifetime
         usedCodes: [] 
       };
       return saved ? { ...defaultProfile, ...JSON.parse(saved) } : defaultProfile;
     } catch (e) {
-      return { name: 'Bạn Học Viên', joinDate: Date.now(), target: 'Giao tiếp cơ bản', accountTier: 'basic', subscriptionExpiry: null, usedCodes: [] };
+      return { name: 'Bạn Học Viên VIP', joinDate: Date.now(), target: 'IELTS 8.0+', accountTier: 'vip', subscriptionExpiry: null, usedCodes: [] };
     }
   });
 
@@ -119,7 +119,6 @@ const App: React.FC = () => {
   const [limitModalMessage, setLimitModalMessage] = useState('');
 
   // --- Effects for Persistence ---
-  // We check !isResettingRef.current to prevent writing stale data back to localStorage during a reset
   useEffect(() => {
     if (!isResettingRef.current) safeLocalStorage.setItem('vip_tutor_sessions', JSON.stringify(sessions));
   }, [sessions]);
@@ -140,75 +139,74 @@ const App: React.FC = () => {
     if (!isResettingRef.current) safeLocalStorage.setItem('vip_tutor_usage', JSON.stringify(dailyUsage));
   }, [dailyUsage]);
 
+  // Force Upgrade for existing users to match the "Super VIP Pro" request
+  useEffect(() => {
+    if (userProfile.accountTier !== 'vip') {
+       setUserProfile(prev => ({
+         ...prev,
+         accountTier: 'vip',
+         subscriptionExpiry: null
+       }));
+       setNotifications(prev => [{
+          id: Date.now().toString(),
+          title: 'Đã nâng cấp SUPER VIP',
+          message: 'Chào mừng! Tài khoản của bạn đã được nâng cấp lên hạng SUPER VIP miễn phí.',
+          type: 'achievement',
+          timestamp: Date.now(),
+          isRead: false
+       }, ...prev]);
+    }
+  }, []);
+
   // --- HANDLER: Add Notification ---
   const handleAddNotification = (note: AppNotification) => {
     setNotifications(prev => [note, ...prev]);
   };
 
   // --- WATCHDOG: Subscription Expiry Check ---
-  // Runs immediately and then every 30s to ensure real-time downgrade
   useEffect(() => {
     const checkExpiry = () => {
       // Only check if not already basic and has an expiry date
       if (userProfile.accountTier !== 'basic' && userProfile.subscriptionExpiry) {
         if (Date.now() > userProfile.subscriptionExpiry) {
-          // EXPIRED! Downgrade immediately.
           const oldTierName = userProfile.accountTier === 'vip' ? 'VIP' : 'PRO';
-          
           setExpiredPackageName(oldTierName);
-          setShowExpiryModal(true); // TRIGGER BUBBLE MODAL
-
+          setShowExpiryModal(true); 
           setUserProfile(prev => ({
             ...prev,
             accountTier: 'basic',
             subscriptionExpiry: null
           }));
-
-          handleAddNotification({
-            id: Date.now().toString(),
-            title: 'Hết hạn gói cước',
-            message: `Bạn đã sử dụng hết lưu lượng gói ${oldTierName}. Tài khoản đã tự động trở về gói Cơ Bản (giới hạn tính năng). Hãy đăng ký/gia hạn thêm để tiếp tục sử dụng các tính năng nâng cao.`,
-            type: 'system',
-            timestamp: Date.now(),
-            isRead: false
-          });
         }
       }
     };
-
-    checkExpiry(); // Run once on mount/update
-    const interval = setInterval(checkExpiry, 30000); // Run every 30 seconds
+    checkExpiry(); 
+    const interval = setInterval(checkExpiry, 30000); 
     return () => clearInterval(interval);
   }, [userProfile.subscriptionExpiry, userProfile.accountTier]);
 
   // --- Logic for Limits & Usage ---
   const checkLimit = (type: 'message' | 'test' | 'game'): boolean => {
-    // 1. Double check tier expiry before allowing action
     if (userProfile.subscriptionExpiry && userProfile.accountTier !== 'basic') {
        if (Date.now() > userProfile.subscriptionExpiry) {
-          // It's expired, force basic logic (state update will happen via useEffect, but block this action now)
           const basicLimits = TIER_LIMITS['basic'];
           if (type === 'message' && dailyUsage.messagesCount >= basicLimits.messages) return false;
           if (type === 'test' && dailyUsage.testsGenerated >= basicLimits.tests) return false;
           if (type === 'game' && dailyUsage.gamesPlayed >= basicLimits.games) return false;
-          return true; // Technically if within basic limits, allow, but mostly it's a hard stop for premium features
+          return true;
        }
     }
-
     const tier = userProfile.accountTier;
     const limits = TIER_LIMITS[tier];
-
     if (type === 'message' && dailyUsage.messagesCount >= limits.messages) return false;
     if (type === 'test' && dailyUsage.testsGenerated >= limits.tests) return false;
     if (type === 'game' && dailyUsage.gamesPlayed >= limits.games) return false;
-
     return true;
   };
 
   const incrementUsage = (type: 'message' | 'test' | 'game') => {
     setDailyUsage(prev => {
       const today = new Date().toISOString().split('T')[0];
-      // If date changed mid-session
       if (prev.date !== today) {
         return { 
           date: today, 
@@ -236,7 +234,6 @@ const App: React.FC = () => {
       const newSessions = prevSessions.map(session => {
         if (session.id === currentSessionId) {
           const newMessages = typeof updateFn === 'function' ? updateFn(session.messages) : updateFn;
-          // Title update logic
           let newTitle = session.title;
           if (session.title === 'New Session' && newMessages.length > 0) {
              const firstUserMsg = newMessages.find(m => m.role === Role.USER);
@@ -313,34 +310,20 @@ const App: React.FC = () => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // --- Subscription Cancellation Handler ---
   const handleCancelSubscription = () => {
-     if(window.confirm("Bạn có chắc chắn muốn hủy gói cước hiện tại? Tài khoản sẽ trở về gói Basic (Miễn phí) ngay lập tức.")) {
+     if(window.confirm("Bạn có chắc chắn muốn hủy gói VIP?")) {
         setUserProfile(prev => ({
            ...prev,
            accountTier: 'basic',
            subscriptionExpiry: null
         }));
-        handleAddNotification({
-          id: Date.now().toString(),
-          title: 'Đã hủy gói cước',
-          message: 'Gói cước của bạn đã được hủy thành công. Tài khoản đã trở về gói Cơ Bản.',
-          type: 'system',
-          timestamp: Date.now(),
-          isRead: false
-        });
      }
   };
 
   const handleResetApp = () => {
     if(window.confirm('CẢNH BÁO: Hành động này sẽ xóa toàn bộ lịch sử chat và cài đặt. Bạn có chắc chắn không?')) {
-       // Flag to prevent effects from writing back stale state
        isResettingRef.current = true;
-       
-       // Clear storage
        safeLocalStorage.clear();
-       
-       // Reload to reset state
        window.location.reload();
     }
   };
@@ -370,7 +353,7 @@ const App: React.FC = () => {
                 incrementUsage('game');
                 setFullScreenGameData(data);
               } else {
-                setLimitModalMessage("Bạn đã hết lượt chơi game hôm nay. Vui lòng nâng cấp gói để chơi thêm!");
+                setLimitModalMessage("Bạn đã hết lượt chơi game hôm nay.");
                 setIsLimitModalOpen(true);
               }
            }}
@@ -406,11 +389,10 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-[100dvh] bg-gray-100 overflow-hidden relative">
-      {/* --- Safe Storage Warning --- */}
       {!storageStatus.local && (
         <div className="absolute top-0 left-0 right-0 bg-red-600 text-white text-xs px-4 py-1 z-[100] flex items-center justify-center gap-2">
            <AlertOctagon className="w-3 h-3" />
-           <span>Cảnh báo: Trình duyệt đang chặn lưu trữ (Private Mode/Tracking Protection). Dữ liệu sẽ không được lưu khi tải lại trang.</span>
+           <span>Cảnh báo: Trình duyệt đang chặn lưu trữ (Private Mode/Tracking Protection).</span>
         </div>
       )}
 
@@ -468,7 +450,6 @@ const App: React.FC = () => {
       </div>
 
       <div className="flex-1 flex flex-col h-full w-full min-w-0">
-        {/* Only show default mobile header if NOT in chat view */}
         {currentView !== 'chat' && (
           <div className="md:hidden h-14 bg-white border-b flex items-center px-4 justify-between flex-shrink-0">
              <span className="font-bold text-gray-800">VIP Tutor</span>

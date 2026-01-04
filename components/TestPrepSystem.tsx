@@ -105,13 +105,14 @@ const TestPrepSystem: React.FC<TestPrepSystemProps> = ({
         Hãy tạo JSON đề thi theo đúng format yêu cầu. Chú ý tạo đầy đủ các phần: Phonetics, Grammar, Reading (có passageContent), Writing.
       `;
 
-      // Use Gemini 3 Pro for complex test generation
+      // Use Gemini 3 Pro with Thinking for deep test generation
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: { parts: [{ text: prompt }] },
         config: {
           systemInstruction: TEST_GENERATOR_PROMPT,
           temperature: 0.5,
+          thinkingConfig: { thinkingBudget: 2048 } // VIP Logic
         }
       });
 
@@ -227,13 +228,14 @@ const TestPrepSystem: React.FC<TestPrepSystemProps> = ({
         Hãy chấm điểm theo đúng format JSON yêu cầu.
       `;
 
-      // Use Gemini 3 Pro for grading accuracy
+      // Use Gemini 3 Pro with Thinking for accurate grading
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview', 
         contents: { parts: [{ text: prompt }] },
         config: {
           systemInstruction: TEST_GRADER_PROMPT,
           temperature: 0.2,
+          thinkingConfig: { thinkingBudget: 1024 } // VIP Logic
         }
       });
 
