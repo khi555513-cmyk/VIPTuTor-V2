@@ -16,7 +16,6 @@ import { Menu, AlertOctagon } from 'lucide-react';
 import { safeLocalStorage, storageStatus } from './services/storage';
 
 const App: React.FC = () => {
-  // Ref to track if we are in the process of resetting data
   const isResettingRef = useRef(false);
 
   // --- App Data State ---
@@ -68,22 +67,22 @@ const App: React.FC = () => {
     }
   });
 
-  // User Profile State
+  // User Profile State - SUPER VIP PRO DEFAULT
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     try {
       const saved = safeLocalStorage.getItem('vip_tutor_profile');
-      // SUPER VIP PRO: Default to VIP Lifetime for everyone!
       const defaultProfile: UserProfile = { 
-        name: 'Bạn Học Viên VIP', 
+        name: 'Super VIP Student', 
         joinDate: Date.now(), 
-        target: 'IELTS 8.0+',
-        accountTier: 'vip', // Default VIP
+        target: 'IELTS 9.0+',
+        accountTier: 'vip', // Always VIP
         subscriptionExpiry: null, // Lifetime
         usedCodes: [] 
       };
-      return saved ? { ...defaultProfile, ...JSON.parse(saved) } : defaultProfile;
+      // Merge saved data but ENFORCE VIP status
+      return saved ? { ...defaultProfile, ...JSON.parse(saved), accountTier: 'vip', subscriptionExpiry: null } : defaultProfile;
     } catch (e) {
-      return { name: 'Bạn Học Viên VIP', joinDate: Date.now(), target: 'IELTS 8.0+', accountTier: 'vip', subscriptionExpiry: null, usedCodes: [] };
+      return { name: 'Super VIP Student', joinDate: Date.now(), target: 'IELTS 9.0+', accountTier: 'vip', subscriptionExpiry: null, usedCodes: [] };
     }
   });
 
@@ -110,9 +109,8 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [fullScreenGameData, setFullScreenGameData] = useState<GameData | null>(null);
 
-  // Expiry Modal State
+  // Expiry Modal State (Disabled for Lifetime VIP)
   const [showExpiryModal, setShowExpiryModal] = useState(false);
-  const [expiredPackageName, setExpiredPackageName] = useState('');
 
   // Limit Reached Modal State
   const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
@@ -139,69 +137,14 @@ const App: React.FC = () => {
     if (!isResettingRef.current) safeLocalStorage.setItem('vip_tutor_usage', JSON.stringify(dailyUsage));
   }, [dailyUsage]);
 
-  // Force Upgrade for existing users to match the "Super VIP Pro" request
-  useEffect(() => {
-    if (userProfile.accountTier !== 'vip') {
-       setUserProfile(prev => ({
-         ...prev,
-         accountTier: 'vip',
-         subscriptionExpiry: null
-       }));
-       setNotifications(prev => [{
-          id: Date.now().toString(),
-          title: 'Đã nâng cấp SUPER VIP',
-          message: 'Chào mừng! Tài khoản của bạn đã được nâng cấp lên hạng SUPER VIP miễn phí.',
-          type: 'achievement',
-          timestamp: Date.now(),
-          isRead: false
-       }, ...prev]);
-    }
-  }, []);
-
   // --- HANDLER: Add Notification ---
   const handleAddNotification = (note: AppNotification) => {
     setNotifications(prev => [note, ...prev]);
   };
 
-  // --- WATCHDOG: Subscription Expiry Check ---
-  useEffect(() => {
-    const checkExpiry = () => {
-      // Only check if not already basic and has an expiry date
-      if (userProfile.accountTier !== 'basic' && userProfile.subscriptionExpiry) {
-        if (Date.now() > userProfile.subscriptionExpiry) {
-          const oldTierName = userProfile.accountTier === 'vip' ? 'VIP' : 'PRO';
-          setExpiredPackageName(oldTierName);
-          setShowExpiryModal(true); 
-          setUserProfile(prev => ({
-            ...prev,
-            accountTier: 'basic',
-            subscriptionExpiry: null
-          }));
-        }
-      }
-    };
-    checkExpiry(); 
-    const interval = setInterval(checkExpiry, 30000); 
-    return () => clearInterval(interval);
-  }, [userProfile.subscriptionExpiry, userProfile.accountTier]);
-
-  // --- Logic for Limits & Usage ---
+  // --- Logic for Limits & Usage (Always allow for VIP) ---
   const checkLimit = (type: 'message' | 'test' | 'game'): boolean => {
-    if (userProfile.subscriptionExpiry && userProfile.accountTier !== 'basic') {
-       if (Date.now() > userProfile.subscriptionExpiry) {
-          const basicLimits = TIER_LIMITS['basic'];
-          if (type === 'message' && dailyUsage.messagesCount >= basicLimits.messages) return false;
-          if (type === 'test' && dailyUsage.testsGenerated >= basicLimits.tests) return false;
-          if (type === 'game' && dailyUsage.gamesPlayed >= basicLimits.games) return false;
-          return true;
-       }
-    }
-    const tier = userProfile.accountTier;
-    const limits = TIER_LIMITS[tier];
-    if (type === 'message' && dailyUsage.messagesCount >= limits.messages) return false;
-    if (type === 'test' && dailyUsage.testsGenerated >= limits.tests) return false;
-    if (type === 'game' && dailyUsage.gamesPlayed >= limits.games) return false;
-    return true;
+    return true; // SUPER VIP HAS NO LIMITS
   };
 
   const incrementUsage = (type: 'message' | 'test' | 'game') => {
@@ -311,13 +254,7 @@ const App: React.FC = () => {
   };
 
   const handleCancelSubscription = () => {
-     if(window.confirm("Bạn có chắc chắn muốn hủy gói VIP?")) {
-        setUserProfile(prev => ({
-           ...prev,
-           accountTier: 'basic',
-           subscriptionExpiry: null
-        }));
-     }
+     alert("Bạn đang sử dụng phiên bản Super VIP Pro trọn đời. Không cần hủy!");
   };
 
   const handleResetApp = () => {
@@ -349,13 +286,8 @@ const App: React.FC = () => {
            messages={getCurrentMessages()}
            setMessages={setMessages}
            onPlayGame={(data) => {
-              if (checkLimit('game')) {
-                incrementUsage('game');
-                setFullScreenGameData(data);
-              } else {
-                setLimitModalMessage("Bạn đã hết lượt chơi game hôm nay.");
-                setIsLimitModalOpen(true);
-              }
+              incrementUsage('game');
+              setFullScreenGameData(data);
            }}
            onAddNotification={handleAddNotification}
            checkLimit={() => checkLimit('message')}
@@ -392,31 +324,13 @@ const App: React.FC = () => {
       {!storageStatus.local && (
         <div className="absolute top-0 left-0 right-0 bg-red-600 text-white text-xs px-4 py-1 z-[100] flex items-center justify-center gap-2">
            <AlertOctagon className="w-3 h-3" />
-           <span>Cảnh báo: Trình duyệt đang chặn lưu trữ (Private Mode/Tracking Protection).</span>
+           <span>Cảnh báo: Trình duyệt đang chặn lưu trữ.</span>
         </div>
       )}
 
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
       
-      <SubscriptionExpiredModal 
-        isOpen={showExpiryModal} 
-        onClose={() => setShowExpiryModal(false)}
-        onRenew={() => {
-          setShowExpiryModal(false);
-          setCurrentView('profile');
-        }}
-        expiredPackageName={expiredPackageName}
-      />
-
-      <LimitReachedModal 
-        isOpen={isLimitModalOpen}
-        onClose={() => setIsLimitModalOpen(false)}
-        onUpgrade={() => {
-          setIsLimitModalOpen(false);
-          setCurrentView('profile');
-        }}
-        message={limitModalMessage}
-      />
+      {/* Expiry and Limit Modals removed/disabled for Super VIP */}
 
       {fullScreenGameData && (
         <div className="fixed inset-0 z-50 bg-gray-100 animate-fade-in flex flex-col">

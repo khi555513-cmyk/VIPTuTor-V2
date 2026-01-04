@@ -3,22 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import { Attachment, TutorMode } from '../types';
 import { getSystemInstruction } from '../constants';
 
-export const validateApiKey = async (apiKey: string): Promise<boolean> => {
-  // This function is kept for backward compatibility with unused components,
-  // but for the main app we use process.env.API_KEY.
-  if (!apiKey) return false;
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: { parts: [{ text: 'test' }] },
-    });
-    return true;
-  } catch (error) {
-    console.warn("API Key validation failed", error);
-    return false;
-  }
-};
+// Manual validation removed as we strictly use process.env.API_KEY now.
 
 export const generateTutorResponse = async (
   text: string,
@@ -26,11 +11,12 @@ export const generateTutorResponse = async (
   mode: TutorMode
 ): Promise<string> => {
   // STRICT COMPLIANCE: API Key must come from process.env.API_KEY
+  // The user's provided key is assumed to be configured in the environment variables.
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
     console.error("API Key not found in environment variables.");
-    return `⚠️ **Cấu hình hệ thống chưa hoàn tất**\n\nHệ thống chưa tìm thấy API Key (process.env.API_KEY). Vui lòng liên hệ quản trị viên để kiểm tra cấu hình server.`;
+    return `⚠️ **Lỗi Cấu Hình Hệ Thống**\n\nKhông tìm thấy \`process.env.API_KEY\`. Vui lòng đảm bảo bạn đã cấu hình biến môi trường chính xác trong file .env hoặc cài đặt server.`;
   }
 
   try {
@@ -42,17 +28,11 @@ export const generateTutorResponse = async (
     // Add attachments if any
     if (attachments && attachments.length > 0) {
       attachments.forEach(att => {
-        // Safe guard against empty data
         if (!att.data) return;
-
-        // If it's a text attachment (e.g. converted DOCX), append to prompt
         if (att.isText) {
           promptText += `\n\n[Attached Document Content - ${att.name || 'Doc'}]:\n${att.data}\n`;
-        } 
-        // If it's a regular supported binary (Image, PDF)
-        else {
+        } else {
           try {
-             // Remove data:image/png;base64, prefix if present for clean base64
              const base64Data = att.data.includes(',') ? att.data.split(',')[1] : att.data;
              if (base64Data) {
                 parts.push({
@@ -69,7 +49,6 @@ export const generateTutorResponse = async (
       });
     }
 
-    // Add text prompt
     if (promptText) {
       parts.push({ text: promptText });
     } else if (parts.length === 0) {
@@ -78,7 +57,7 @@ export const generateTutorResponse = async (
 
     const systemInstruction = getSystemInstruction(mode);
 
-    // Use Gemini 3 Pro Preview for VIP quality with Thinking Config
+    // SUPER VIP PRO MODE: Use Gemini 3 Pro with Thinking
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
@@ -88,16 +67,15 @@ export const generateTutorResponse = async (
         config: {
           systemInstruction: systemInstruction,
           temperature: 0.7,
-          thinkingConfig: { thinkingBudget: 2048 } // SUPER VIP INTELLIGENCE
+          thinkingConfig: { thinkingBudget: 2048 } // Intelligent Thinking Enabled
         }
       });
       return response.text || "Xin lỗi, tôi không thể tạo câu trả lời vào lúc này.";
     } catch (primaryError) {
-      console.warn("Gemini 3 Pro failed. Attempting fallback to Flash.", primaryError);
+      console.warn("Gemini 3 Pro failed. Attempting fallback.", primaryError);
       
-      // Fallback model: Gemini 3 Flash Preview (Faster, no thinking)
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3-flash-preview', // Fallback
         contents: {
           parts: parts
         },
