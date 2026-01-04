@@ -10,7 +10,6 @@ import mammoth from 'mammoth';
 import { TEST_GENERATOR_PROMPT, TEST_GRADER_PROMPT } from '../constants';
 import MarkdownRenderer from './MarkdownRenderer';
 import confetti from 'canvas-confetti';
-import { getApiKey } from '../services/geminiService';
 
 interface TestPrepSystemProps {
   onBack: () => void;
@@ -85,9 +84,9 @@ const TestPrepSystem: React.FC<TestPrepSystemProps> = ({
     setStep('generating');
     incrementUsage(); // Deduct usage
 
-    const apiKey = getApiKey();
+    const apiKey = process.env.API_KEY;
     if (!apiKey) {
-      alert("⚠️ Lỗi: Chưa cấu hình API Key. Vui lòng kiểm tra file .env hoặc cấu hình key.");
+      alert("⚠️ Lỗi: Chưa cấu hình API Key. Vui lòng liên hệ quản trị viên.");
       setStep('config');
       return;
     }
@@ -106,8 +105,9 @@ const TestPrepSystem: React.FC<TestPrepSystemProps> = ({
         Hãy tạo JSON đề thi theo đúng format yêu cầu. Chú ý tạo đầy đủ các phần: Phonetics, Grammar, Reading (có passageContent), Writing.
       `;
 
+      // Use Gemini 3 Pro for complex test generation
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3-pro-preview',
         contents: { parts: [{ text: prompt }] },
         config: {
           systemInstruction: TEST_GENERATOR_PROMPT,
@@ -210,7 +210,7 @@ const TestPrepSystem: React.FC<TestPrepSystemProps> = ({
     handleExitFullScreen();
 
     setStep('grading');
-    const apiKey = getApiKey();
+    const apiKey = process.env.API_KEY;
     if (!apiKey) return;
 
     try {
@@ -227,8 +227,9 @@ const TestPrepSystem: React.FC<TestPrepSystemProps> = ({
         Hãy chấm điểm theo đúng format JSON yêu cầu.
       `;
 
+      // Use Gemini 3 Pro for grading accuracy
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash', 
+        model: 'gemini-3-pro-preview', 
         contents: { parts: [{ text: prompt }] },
         config: {
           systemInstruction: TEST_GRADER_PROMPT,

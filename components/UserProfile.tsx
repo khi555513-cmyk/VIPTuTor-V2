@@ -1,9 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, AccountTier, DailyUsage } from '../types';
-import { User, Mail, Phone, Target, Camera, Save, CreditCard, LogOut, Crown, Star, CheckCircle, Zap, Shield, ShoppingCart, Loader2, MessageCircle, AlertTriangle, Key, Edit2 } from 'lucide-react';
+import { User, Camera, Save, CreditCard, LogOut, Crown, Star, CheckCircle, Zap, Shield, MessageCircle, AlertTriangle, Key } from 'lucide-react';
 import { TIER_LIMITS, SUBSCRIPTION_PACKAGES, ZALO_CONSULTATION_URL, ACTIVATION_CODES } from '../constants';
-import { getApiKey, validateApiKey } from '../services/geminiService';
 import { safeLocalStorage } from '../services/storage';
 
 interface UserProfileProps {
@@ -37,12 +36,6 @@ const UserProfileView: React.FC<UserProfileProps> = ({
   const [activationCode, setActivationCode] = useState('');
   const [activationMsg, setActivationMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
   
-  // API Key State
-  const [currentApiKey, setCurrentApiKey] = useState<string>(getApiKey() || '');
-  const [isEditingKey, setIsEditingKey] = useState(false);
-  const [newApiKey, setNewApiKey] = useState('');
-  const [keyValidationMsg, setKeyValidationMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = () => {
@@ -133,28 +126,6 @@ const UserProfileView: React.FC<UserProfileProps> = ({
     }
   };
   
-  const handleUpdateApiKey = async () => {
-    setKeyValidationMsg(null);
-    const key = newApiKey.trim();
-    if (!key) {
-       setKeyValidationMsg({ type: 'error', text: "Không được để trống." });
-       return;
-    }
-
-    const isValid = await validateApiKey(key);
-    if (isValid) {
-       safeLocalStorage.setItem('gemini_api_key', key);
-       setCurrentApiKey(key);
-       setNewApiKey('');
-       setIsEditingKey(false);
-       setKeyValidationMsg({ type: 'success', text: "Cập nhật API Key thành công!" });
-       // Force reload to ensure services pick up new key
-       setTimeout(() => window.location.reload(), 1500);
-    } else {
-       setKeyValidationMsg({ type: 'error', text: "Key không hợp lệ. Vui lòng kiểm tra lại." });
-    }
-  };
-
   const renderTierBadge = (tier: AccountTier) => {
     switch (tier) {
       case 'vip':
@@ -178,12 +149,6 @@ const UserProfileView: React.FC<UserProfileProps> = ({
     }
   };
   
-  const getMaskedKey = (key: string) => {
-     if (!key) return "Chưa cấu hình";
-     if (key.length < 10) return "******";
-     return `${key.substring(0, 6)}...${key.substring(key.length - 4)}`;
-  };
-
   const limits = TIER_LIMITS[profile.accountTier];
 
   return (
@@ -365,67 +330,6 @@ const UserProfileView: React.FC<UserProfileProps> = ({
             </div>
           </div>
           
-          {/* 3. API Key Configuration */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-             <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2 text-base md:text-lg">
-                  <Key className="w-5 h-5 text-gray-600" />
-                  Cấu hình API Key
-                </h3>
-                {!isEditingKey && (
-                   <button 
-                     onClick={() => setIsEditingKey(true)}
-                     className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1"
-                   >
-                     <Edit2 className="w-4 h-4" /> Thay đổi
-                   </button>
-                )}
-             </div>
-             
-             {!isEditingKey ? (
-               <div className="bg-gray-100 p-3 rounded-lg flex justify-between items-center">
-                  <span className="font-mono text-gray-600">{getMaskedKey(currentApiKey)}</span>
-                  <div className="flex items-center gap-1 text-green-600 text-xs font-bold">
-                    <Shield className="w-3 h-3" /> Được bảo mật
-                  </div>
-               </div>
-             ) : (
-               <div className="space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                  <p className="text-sm text-gray-600">Nhập Google Gemini API Key mới:</p>
-                  <div className="flex gap-2">
-                     <input 
-                       type="password" 
-                       value={newApiKey}
-                       onChange={(e) => setNewApiKey(e.target.value)}
-                       placeholder="AIzaSy..."
-                       className="flex-1 p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                     />
-                     <button 
-                       onClick={handleUpdateApiKey}
-                       className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700"
-                     >
-                       Lưu
-                     </button>
-                     <button 
-                       onClick={() => setIsEditingKey(false)}
-                       className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-300"
-                     >
-                       Hủy
-                     </button>
-                  </div>
-                  {keyValidationMsg && (
-                    <div className={`text-xs ${keyValidationMsg.type === 'success' ? 'text-green-600' : 'text-red-500'} flex items-center gap-1`}>
-                       {keyValidationMsg.type === 'success' ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                       {keyValidationMsg.text}
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    * Key được lưu trực tiếp trên trình duyệt của bạn.
-                  </p>
-               </div>
-             )}
-          </div>
-
           {/* 4. Pricing & Activation Section */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">

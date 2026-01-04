@@ -2,46 +2,18 @@
 import { GoogleGenAI } from "@google/genai";
 import { Attachment, TutorMode } from '../types';
 import { getSystemInstruction } from '../constants';
-import { safeLocalStorage, safeSessionStorage } from './storage';
 
-// Helper to safely retrieve API Key (from env, session, or localStorage)
-export const getApiKey = (): string | undefined => {
-  let key: string | undefined;
-  
-  if (typeof window !== 'undefined') {
-    // 1. Check Session Storage (Temporary for this tab)
-    const sessionKey = safeSessionStorage.getItem('gemini_api_key');
-    if (sessionKey) return sessionKey;
-
-    // 2. Check Local Storage (Persisted user setting)
-    const localKey = safeLocalStorage.getItem('gemini_api_key');
-    if (localKey) return localKey;
-  }
-
-  // 3. Check Env (Process)
+export const validateApiKey = async (apiKey: string): Promise<boolean> => {
+  if (!apiKey) return false;
   try {
-    if (typeof process !== 'undefined' && process.env) {
-      key = process.env.API_KEY;
-    }
-  } catch (e) {
-    // Ignore ReferenceError if process is not defined
-  }
-  
-  return key;
-};
-
-// New function to validate if a key works
-export const validateApiKey = async (key: string): Promise<boolean> => {
-  try {
-    const ai = new GoogleGenAI({ apiKey: key });
-    // Attempt a minimal generation to test the key
+    const ai = new GoogleGenAI({ apiKey });
     await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: { parts: [{ text: "hi" }] },
+      model: 'gemini-3-flash-preview',
+      contents: { parts: [{ text: 'test' }] },
     });
     return true;
   } catch (error) {
-    console.error("API Key Validation Failed:", error);
+    console.warn("API Key validation failed", error);
     return false;
   }
 };
@@ -51,17 +23,15 @@ export const generateTutorResponse = async (
   attachments: Attachment[],
   mode: TutorMode
 ): Promise<string> => {
-  const apiKey = getApiKey();
+  // STRICT COMPLIANCE: API Key must come from process.env.API_KEY
+  const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
-    return `⚠️ **CHƯA CÓ API KEY**\n\n` +
-           `Hệ thống chưa tìm thấy cấu hình API Key.\n` +
-           `Vui lòng vào mục **Settings & Profile** để nhập API Key của bạn.\n\n` +
-           `Nếu bạn vừa xóa key, hãy tải lại trang để nhập lại.`;
+    console.error("API Key not found in environment variables.");
+    return `⚠️ **Cấu hình hệ thống chưa hoàn tất**\n\nHệ thống chưa tìm thấy API Key (process.env.API_KEY). Vui lòng liên hệ quản trị viên để kiểm tra cấu hình server.`;
   }
 
   try {
-    // Initialize the client per request
     const ai = new GoogleGenAI({ apiKey: apiKey });
 
     const parts: any[] = [];
@@ -106,10 +76,11 @@ export const generateTutorResponse = async (
 
     const systemInstruction = getSystemInstruction(mode);
 
-    // Primary model attempt: Gemini 2.0 Flash (Stable)
+    // Use Gemini 3 Pro Preview for VIP quality
+    // Model selection based on task complexity implied by "VIP Tutor"
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3-pro-preview',
         contents: {
           parts: parts
         },
@@ -120,11 +91,11 @@ export const generateTutorResponse = async (
       });
       return response.text || "Xin lỗi, tôi không thể tạo câu trả lời vào lúc này.";
     } catch (primaryError) {
-      console.warn("Gemini 2.0 Flash failed. Attempting fallback.", primaryError);
+      console.warn("Gemini 3 Pro failed. Attempting fallback to Flash.", primaryError);
       
-      // Fallback model: Gemini 2.0 Flash Lite (Preview)
+      // Fallback model: Gemini 3 Flash Preview
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash-lite-preview-02-05',
+        model: 'gemini-3-flash-preview',
         contents: {
           parts: parts
         },
@@ -138,6 +109,6 @@ export const generateTutorResponse = async (
 
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return `**Lỗi kết nối với Gia sư AI:**\n\n${error instanceof Error ? error.message : JSON.stringify(error)}\n\nVui lòng kiểm tra API Key của bạn trong phần Cài đặt.`;
+    return `**Lỗi kết nối với Gia sư AI:**\n\n${error instanceof Error ? error.message : JSON.stringify(error)}`;
   }
 };
