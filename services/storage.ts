@@ -1,62 +1,99 @@
 
-// In-memory fallback for when storage is blocked
-const memoryStore = new Map<string, string>();
-let isLocalBlocked = false;
-let isSessionBlocked = false;
+// In-memory fallback
+class MemoryStore {
+  private cache: Record<string, string> = {};
+  getItem(key: string) { return this.cache[key] || null; }
+  setItem(key: string, v: string) { this.cache[key] = v; }
+  removeItem(key: string) { delete this.cache[key]; }
+  clear() { this.cache = {}; }
+}
 
-// Helper to safely access storage with circuit breaker
-const tryStorage = (
-  type: 'localStorage' | 'sessionStorage',
-  action: 'get' | 'set' | 'remove' | 'clear',
-  key?: string,
-  value?: string
-): string | null => {
-  // 1. Check if already blocked
-  if (type === 'localStorage' && isLocalBlocked) {
-    if (action === 'get' && key) return memoryStore.get(key) || null;
-    if (action === 'set' && key && value) memoryStore.set(key, value);
-    if (action === 'remove' && key) memoryStore.delete(key);
-    if (action === 'clear') memoryStore.clear();
-    return null;
-  }
-  
-  if (type === 'sessionStorage' && isSessionBlocked) return null;
+const memStore = new MemoryStore();
 
-  // 2. Try access
-  try {
-    const storage = window[type];
-    if (action === 'get' && key) return storage.getItem(key);
-    if (action === 'set' && key && value) storage.setItem(key, value);
-    if (action === 'remove' && key) storage.removeItem(key);
-    if (action === 'clear') storage.clear();
-    return null;
-  } catch (e) {
-    // 3. On Error: Block future access
-    if (type === 'localStorage') {
-      isLocalBlocked = true;
-      // Sync memory store if possible/needed? No, start fresh to be safe.
-      if (action === 'set' && key && value) memoryStore.set(key, value);
-    } else {
-      isSessionBlocked = true;
-    }
-    return null;
+// Feature Detection - Runs once on module load
+let isLocalAvailable = false;
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const key = '__storage_test__';
+    window.localStorage.setItem(key, key);
+    window.localStorage.removeItem(key);
+    isLocalAvailable = true;
   }
-};
+} catch (e) {
+  isLocalAvailable = false;
+}
+
+let isSessionAvailable = false;
+try {
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    const key = '__storage_test__';
+    window.sessionStorage.setItem(key, key);
+    window.sessionStorage.removeItem(key);
+    isSessionAvailable = true;
+  }
+} catch (e) {
+  isSessionAvailable = false;
+}
 
 export const storageStatus = {
-  get local() { return !isLocalBlocked; },
-  get session() { return !isSessionBlocked; }
+  local: isLocalAvailable,
+  session: isSessionAvailable
 };
 
+// Safe wrappers that respect the detection result
 export const safeLocalStorage = {
-  getItem: (key: string): string | null => tryStorage('localStorage', 'get', key),
-  setItem: (key: string, value: string): void => { tryStorage('localStorage', 'set', key, value); },
-  removeItem: (key: string): void => { tryStorage('localStorage', 'remove', key); },
-  clear: (): void => { tryStorage('localStorage', 'clear'); }
+  getItem: (key: string): string | null => {
+    if (!isLocalAvailable) return memStore.getItem(key);
+    try {
+      return window.localStorage.getItem(key);
+    } catch (e) { return null; }
+  },
+  setItem: (key: string, value: string): void => {
+    if (!isLocalAvailable) {
+      memStore.setItem(key, value);
+      return;
+    }
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (e) { /* Quota exceeded or permission change */ }
+  },
+  removeItem: (key: string): void => {
+    if (!isLocalAvailable) {
+      memStore.removeItem(key);
+      return;
+    }
+    try {
+      window.localStorage.removeItem(key);
+    } catch (e) { }
+  },
+  clear: (): void => {
+    if (!isLocalAvailable) {
+      memStore.clear();
+      return;
+    }
+    try {
+      window.localStorage.clear();
+    } catch (e) { }
+  }
 };
 
 export const safeSessionStorage = {
-  getItem: (key: string): string | null => tryStorage('sessionStorage', 'get', key),
-  setItem: (key: string, value: string): void => { tryStorage('sessionStorage', 'set', key, value); },
-  removeItem: (key: string): void => { tryStorage('sessionStorage', 'remove', key); }
+  getItem: (key: string): string | null => {
+    if (!isSessionAvailable) return null;
+    try {
+      return window.sessionStorage.getItem(key);
+    } catch (e) { return null; }
+  },
+  setItem: (key: string, value: string): void => {
+    if (!isSessionAvailable) return;
+    try {
+      window.sessionStorage.setItem(key, value);
+    } catch (e) { }
+  },
+  removeItem: (key: string): void => {
+    if (!isSessionAvailable) return;
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch (e) { }
+  }
 };
