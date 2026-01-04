@@ -1,92 +1,62 @@
 
-// Safely check if storage is available
-const isStorageAvailable = (type: 'localStorage' | 'sessionStorage'): boolean => {
+// In-memory fallback for when storage is blocked
+const memoryStore = new Map<string, string>();
+let isLocalBlocked = false;
+let isSessionBlocked = false;
+
+// Helper to safely access storage with circuit breaker
+const tryStorage = (
+  type: 'localStorage' | 'sessionStorage',
+  action: 'get' | 'set' | 'remove' | 'clear',
+  key?: string,
+  value?: string
+): string | null => {
+  // 1. Check if already blocked
+  if (type === 'localStorage' && isLocalBlocked) {
+    if (action === 'get' && key) return memoryStore.get(key) || null;
+    if (action === 'set' && key && value) memoryStore.set(key, value);
+    if (action === 'remove' && key) memoryStore.delete(key);
+    if (action === 'clear') memoryStore.clear();
+    return null;
+  }
+  
+  if (type === 'sessionStorage' && isSessionBlocked) return null;
+
+  // 2. Try access
   try {
     const storage = window[type];
-    const x = '__storage_test__';
-    storage.setItem(x, x);
-    storage.removeItem(x);
-    return true;
+    if (action === 'get' && key) return storage.getItem(key);
+    if (action === 'set' && key && value) storage.setItem(key, value);
+    if (action === 'remove' && key) storage.removeItem(key);
+    if (action === 'clear') storage.clear();
+    return null;
   } catch (e) {
-    return false;
+    // 3. On Error: Block future access
+    if (type === 'localStorage') {
+      isLocalBlocked = true;
+      // Sync memory store if possible/needed? No, start fresh to be safe.
+      if (action === 'set' && key && value) memoryStore.set(key, value);
+    } else {
+      isSessionBlocked = true;
+    }
+    return null;
   }
 };
 
 export const storageStatus = {
-  local: typeof window !== 'undefined' ? isStorageAvailable('localStorage') : false,
-  session: typeof window !== 'undefined' ? isStorageAvailable('sessionStorage') : false
+  get local() { return !isLocalBlocked; },
+  get session() { return !isSessionBlocked; }
 };
 
-// Wrapper for LocalStorage
 export const safeLocalStorage = {
-  getItem: (key: string): string | null => {
-    try {
-      if (storageStatus.local) {
-        return localStorage.getItem(key);
-      }
-      return null;
-    } catch (e) {
-      // console.warn('LocalStorage blocked:', e);
-      return null;
-    }
-  },
-  setItem: (key: string, value: string): void => {
-    try {
-      if (storageStatus.local) {
-        localStorage.setItem(key, value);
-      }
-    } catch (e) {
-      // console.warn('LocalStorage write failed:', e);
-    }
-  },
-  removeItem: (key: string): void => {
-    try {
-      if (storageStatus.local) {
-        localStorage.removeItem(key);
-      }
-    } catch (e) {
-      // console.warn('LocalStorage remove failed:', e);
-    }
-  },
-  clear: (): void => {
-    try {
-      if (storageStatus.local) {
-        localStorage.clear();
-      }
-    } catch (e) {
-       // console.warn('LocalStorage clear failed:', e);
-    }
-  }
+  getItem: (key: string): string | null => tryStorage('localStorage', 'get', key),
+  setItem: (key: string, value: string): void => { tryStorage('localStorage', 'set', key, value); },
+  removeItem: (key: string): void => { tryStorage('localStorage', 'remove', key); },
+  clear: (): void => { tryStorage('localStorage', 'clear'); }
 };
 
-// Wrapper for SessionStorage
 export const safeSessionStorage = {
-  getItem: (key: string): string | null => {
-    try {
-      if (storageStatus.session) {
-        return sessionStorage.getItem(key);
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  },
-  setItem: (key: string, value: string): void => {
-    try {
-      if (storageStatus.session) {
-        sessionStorage.setItem(key, value);
-      }
-    } catch (e) {
-      // Ignore
-    }
-  },
-  removeItem: (key: string): void => {
-    try {
-      if (storageStatus.session) {
-        sessionStorage.removeItem(key);
-      }
-    } catch (e) {
-      // Ignore
-    }
-  }
+  getItem: (key: string): string | null => tryStorage('sessionStorage', 'get', key),
+  setItem: (key: string, value: string): void => { tryStorage('sessionStorage', 'set', key, value); },
+  removeItem: (key: string): void => { tryStorage('sessionStorage', 'remove', key); }
 };
