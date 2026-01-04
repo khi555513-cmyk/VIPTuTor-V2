@@ -9,11 +9,21 @@
     <!-- Console Noise Suppression -->
     <script>
       (function() {
-        const originalWarn = console.warn;
-        console.warn = function(...args) {
-          if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
-          originalWarn.apply(console, args);
-        };
+        // Suppress Tailwind CDN warnings and other noise
+        const noop = () => {};
+        const methods = ['log', 'warn', 'info', 'error'];
+        
+        methods.forEach(method => {
+          const original = console[method];
+          console[method] = function(...args) {
+            const msg = args[0];
+            if (typeof msg === 'string') {
+               if (msg.includes('cdn.tailwindcss.com')) return;
+               if (msg.includes('Tracking Prevention')) return; // Try to catch browser logs if they pass through console
+            }
+            original.apply(console, args);
+          };
+        });
       })();
     </script>
 
