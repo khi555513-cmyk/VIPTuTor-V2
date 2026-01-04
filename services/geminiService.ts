@@ -3,20 +3,18 @@ import { GoogleGenAI } from "@google/genai";
 import { Attachment, TutorMode } from '../types';
 import { getSystemInstruction } from '../constants';
 
-// Manual validation removed as we strictly use process.env.API_KEY now.
-
 export const generateTutorResponse = async (
   text: string,
   attachments: Attachment[],
   mode: TutorMode
 ): Promise<string> => {
   // STRICT COMPLIANCE: API Key must come from process.env.API_KEY
-  // The user's provided key is assumed to be configured in the environment variables.
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
     console.error("API Key not found in environment variables.");
-    return `⚠️ **Lỗi Cấu Hình Hệ Thống**\n\nKhông tìm thấy \`process.env.API_KEY\`. Vui lòng đảm bảo bạn đã cấu hình biến môi trường chính xác trong file .env hoặc cài đặt server.`;
+    // Helpful error message for the user to configure their specific key
+    return `⚠️ **Lỗi Cấu Hình Hệ Thống**\n\nChưa tìm thấy API Key. Vui lòng cấu hình biến môi trường:\n\n\`API_KEY=AIzaSyBI4BP3mcdnuMhk0nqE-eXsTmt-jwumqE8\`\n\n(Hoặc kiểm tra file .env)`;
   }
 
   try {
@@ -57,7 +55,7 @@ export const generateTutorResponse = async (
 
     const systemInstruction = getSystemInstruction(mode);
 
-    // SUPER VIP PRO MODE: Use Gemini 3 Pro with Thinking
+    // Use Gemini 3 Pro with Thinking for high intelligence
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
@@ -67,7 +65,7 @@ export const generateTutorResponse = async (
         config: {
           systemInstruction: systemInstruction,
           temperature: 0.7,
-          thinkingConfig: { thinkingBudget: 2048 } // Intelligent Thinking Enabled
+          thinkingConfig: { thinkingBudget: 2048 }
         }
       });
       return response.text || "Xin lỗi, tôi không thể tạo câu trả lời vào lúc này.";

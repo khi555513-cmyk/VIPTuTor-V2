@@ -26,7 +26,7 @@ export const safeLocalStorage = {
       }
       return null;
     } catch (e) {
-      console.warn('LocalStorage blocked:', e);
+      // console.warn('LocalStorage blocked:', e);
       return null;
     }
   },
@@ -36,7 +36,7 @@ export const safeLocalStorage = {
         localStorage.setItem(key, value);
       }
     } catch (e) {
-      console.warn('LocalStorage write failed:', e);
+      // console.warn('LocalStorage write failed:', e);
     }
   },
   removeItem: (key: string): void => {
@@ -45,7 +45,7 @@ export const safeLocalStorage = {
         localStorage.removeItem(key);
       }
     } catch (e) {
-      console.warn('LocalStorage remove failed:', e);
+      // console.warn('LocalStorage remove failed:', e);
     }
   },
   clear: (): void => {
@@ -54,7 +54,7 @@ export const safeLocalStorage = {
         localStorage.clear();
       }
     } catch (e) {
-       console.warn('LocalStorage clear failed:', e);
+       // console.warn('LocalStorage clear failed:', e);
     }
   }
 };
